@@ -1,11 +1,11 @@
 use nom::{
   branch::alt,
-  bytes::complete::{escaped, tag, take_while},
-  character::complete::{alphanumeric1 as alphanumeric, char, one_of},
+  bytes::streaming::{escaped, tag, take_while},
+  character::streaming::{alphanumeric1 as alphanumeric, char, one_of},
   combinator::{cut, map, opt, value},
   error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
   multi::separated_list0,
-  number::complete::double,
+  number::streaming::double,
   sequence::{delimited, preceded, separated_pair, terminated},
   Err, IResult,
 };
@@ -168,7 +168,7 @@ fn json_value<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 }
 
 /// the root element of a JSON parser is either an object or an array
-fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+pub(crate) fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
   i: &'a str,
 ) -> IResult<&'a str, JsonValue, E> {
   delimited(
