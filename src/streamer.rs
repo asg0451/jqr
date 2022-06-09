@@ -23,13 +23,13 @@ impl<R: Read> Streamer<R> {
     pub fn new(reader: R) -> Self {
         let mut buf = Vec::with_capacity(DEFAULT_BUF_SIZE);
         buf.extend_from_slice(&ZEROS);
-        return Self {
+        Self {
             buf,
             reader,
             start: 0,
             end: 0,
             eof: false,
-        };
+        }
     }
 
     // returns bytes consumed. 0 -> EOF
@@ -58,7 +58,7 @@ impl<R: Read> Streamer<R> {
             "<".to_string()
                 + std::str::from_utf8(&self.buf[0..self.start]).unwrap()
                 + "> | <"
-                + std::str::from_utf8(&self.buf()).unwrap()
+                + std::str::from_utf8(self.buf()).unwrap()
                 + "> | <"
                 + std::str::from_utf8(&self.buf[self.end..]).unwrap()
                 + ">"
@@ -129,16 +129,16 @@ impl<R: Read> Iterator for Streamer<R> {
                         self.eof = true;
                         eprintln!("got eof but still trying again");
                         // try again. TODO: better
-                        return self.next();
+                        self.next()
                     }
                     Err(e) => {
                         eprintln!("consume err");
-                        return Some(Err(e));
+                        Some(Err(e))
                     }
                     Ok(_) => {
                         eprintln!("trying again");
                         // try again. TODO: better
-                        return self.next();
+                        self.next()
                     }
                 }
             }
@@ -162,7 +162,7 @@ impl<R: Read> Iterator for Streamer<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    
 
     use super::*;
 

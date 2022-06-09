@@ -3,11 +3,10 @@ use nom::{
     bytes::streaming::{escaped, tag, take_while},
     character::streaming::{alphanumeric1 as alphanumeric, char, one_of},
     combinator::{cut, map, opt, value},
-    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
+    error::{context, ContextError, ParseError},
     multi::separated_list0,
     number::streaming::double,
-    sequence::{delimited, preceded, separated_pair, terminated},
-    Err, IResult,
+    sequence::{delimited, preceded, separated_pair, terminated}, IResult,
 };
 use std::collections::HashMap;
 use std::str;

@@ -1,19 +1,15 @@
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, take_while},
+    bytes::complete::{tag, take_while},
     character::{
-        complete::{alphanumeric0, alphanumeric1 as alphanumeric, char, one_of},
-        is_alphabetic, is_space,
         streaming::alphanumeric1,
     },
-    combinator::{all_consuming, complete, cut, map, opt, value},
-    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
-    multi::{many0, many1, separated_list0},
-    number::complete::double,
-    sequence::{delimited, preceded, separated_pair, terminated},
-    Err, Finish, IResult,
+    combinator::{all_consuming, map, opt},
+    error::{context, ContextError, ParseError, VerboseError},
+    multi::{many1},
+    sequence::{delimited, preceded}, Finish, IResult,
 };
-use std::collections::HashMap;
+
 use std::str;
 
 use crate::json_parser::JsonValue;
