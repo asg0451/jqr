@@ -1,2 +1,2 @@
-mod json_parser;
-mod streamer;
+mod jq_parser;
+pub mod streamer;
