@@ -1,13 +1,29 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
+use clap::Parser;
+
 use jqr::{parse_filter, streamer::Streamer};
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Filter string
+    #[clap(short, long)]
+    filter: String,
+}
+
 fn main() -> Result<()> {
-    let filter_str = " .hello.man ";
-    let filter = parse_filter(filter_str)?;
+    let args = Args::parse();
+
+    let filter = match parse_filter(&args.filter) {
+        Ok(f) => f,
+        Err(e) => {
+            let msg = nom::error::convert_error::<&str>(&args.filter, e.clone());
+            bail!("failed to parse filter: {}", msg);
+        }
+    };
 
     let stdin = std::io::stdin();
     let r = stdin.lock();
-    // let mut r = r#"{"hello": {"man": 42}}\n"#.as_bytes();
 
     let streamer = Streamer::new(r);
 

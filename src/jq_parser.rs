@@ -71,7 +71,7 @@ fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 }
 
 pub fn parse_filter<'a>(i: &'a str) -> Result<Filter, VerboseError<&'a str>> {
-    let filter = all_consuming::<_, _, VerboseError<&str>, _>(root)(i)
+    let filter = all_consuming::<_, _, VerboseError<&'a str>, _>(root)(i)
         .finish()?
         .1;
     Ok(filter)
