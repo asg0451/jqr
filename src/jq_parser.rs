@@ -1,20 +1,19 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
-    character::{
-        streaming::alphanumeric1,
-    },
+    character::complete::alphanumeric1,
     combinator::{all_consuming, map, opt},
     error::{context, ContextError, ParseError, VerboseError},
-    multi::{many1},
-    sequence::{delimited, preceded}, Finish, IResult,
+    multi::many1,
+    sequence::{delimited, preceded},
+    Finish, IResult,
 };
 
 use std::str;
 
 use crate::json_parser::JsonValue;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Filter {
     FieldAccessor { fields: Vec<String> },
     // Pipeline(Box<Filter>, Box<Filter>),
@@ -82,18 +81,36 @@ pub fn parse_filter<'a>(i: &'a str) -> Result<Filter, VerboseError<&'a str>> {
 mod tests {
     use super::*;
     use anyhow::Result;
+    use nom::error::convert_error;
 
     #[test]
     fn it_works() -> Result<()> {
-        // TODO: this one also has issues if there arent trailing spaces or something... why
-        let input = " .hello.man ";
-        let res = root::<VerboseError<&str>>(input);
-        dbg!(res);
+        let cases = [
+            (
+                " .hello.man ",
+                Filter::FieldAccessor {
+                    fields: vec!["hello".into(), "man".into()],
+                },
+            ),
+            (
+                ".hi",
+                Filter::FieldAccessor {
+                    fields: vec!["hi".into()],
+                },
+            ),
+        ];
 
-        // if let Err(e) = res {
-        //     eprintln!("errors:\n{}", convert_error(input, e));
-        // }
+        for (input, output) in cases {
+            let res = root::<VerboseError<&str>>(input);
+            dbg!(&res);
+            let res = res.finish();
 
+            if let Err(e) = &res {
+                eprintln!("errors:\n{}", convert_error(input, e.clone()));
+            }
+
+            assert_eq!(res, Ok(("", output)));
+        }
         Ok(())
     }
 }
