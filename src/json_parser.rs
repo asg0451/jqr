@@ -22,6 +22,37 @@ pub enum JsonValue {
     Object(HashMap<String, JsonValue>),
 }
 
+impl std::fmt::Display for JsonValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JsonValue::Null => write!(f, "null"),
+            JsonValue::Str(s) => write!(f, "{}", s),
+            JsonValue::Boolean(b) => write!(f, "{}", b),
+            JsonValue::Num(n) => write!(f, "{}", n),
+            JsonValue::Array(a) => {
+                write!(f, "[")?;
+                for (i, e) in a.iter().enumerate() {
+                    write!(f, "{}", e)?;
+                    if i != a.len() - 1 {
+                        write!(f, ",")?;
+                    }
+                }
+                write!(f, "]")
+            }
+            JsonValue::Object(o) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in o.iter().enumerate() {
+                    write!(f, "{}:{}", k, v)?;
+                    if i != o.len() - 1 {
+                        write!(f, ",")?;
+                    }
+                }
+                write!(f, "}}")
+            }
+        }
+    }
+}
+
 impl JsonValue {
     pub fn is_null(&self) -> bool {
         matches!(self, JsonValue::Null)

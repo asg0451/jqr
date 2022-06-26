@@ -3,6 +3,7 @@ use std::io::Read;
 
 use anyhow::Result;
 use nom::{error::VerboseError, Finish};
+use tracing::debug;
 
 use crate::json_parser::{root, JsonValue};
 
@@ -34,7 +35,7 @@ impl<R: Read> Streamer<R> {
 
     // returns bytes consumed. 0 -> EOF
     fn consume(&mut self) -> Result<usize> {
-        eprintln!(
+        debug!(
             "consume - buflen={}; cap={}, start={}, end={}",
             self.buf.len(),
             self.buf.capacity(),
@@ -47,13 +48,13 @@ impl<R: Read> Streamer<R> {
         }
         let b = &mut self.buf[self.end..];
 
-        dbg!(b.len());
+        debug!("{}", b.len());
 
         let n = self.reader.read(b)?;
 
         self.end += n;
 
-        eprintln!(
+        debug!(
             "consumed; buf={:?}",
             "<".to_string()
                 + std::str::from_utf8(&self.buf[0..self.start]).unwrap()
@@ -103,40 +104,40 @@ impl<R: Read> Iterator for Streamer<R> {
     fn next(&mut self) -> Option<Self::Item> {
         let input = self.buf();
         let input_len = input.len();
-        dbg!(std::str::from_utf8(input).unwrap());
+        debug!("{:?}", std::str::from_utf8(input).unwrap());
 
         let res = root::<VerboseError<&[u8]>>(input);
 
         match res {
             Ok((remaining, val)) => {
-                dbg!(&std::str::from_utf8(remaining));
-                dbg!(&val);
+                debug!("{:?}", &std::str::from_utf8(remaining));
+                debug!("{:?}", &val);
                 // is remaining always at the end? i think so
                 let remaining_len = remaining.len();
                 self.advance_by(input_len - remaining_len);
                 Some(Ok(val))
             }
             Err(ref e) if e.is_incomplete() => {
-                dbg!(&e);
+                debug!("{:?}", &e);
 
                 if self.eof {
-                    eprintln!("done");
+                    debug!("done");
                     return None;
                 }
 
                 match self.consume() {
                     Ok(0) => {
                         self.eof = true;
-                        eprintln!("got eof but still trying again");
+                        debug!("got eof but still trying again");
                         // try again. TODO: better
                         self.next()
                     }
                     Err(e) => {
-                        eprintln!("consume err");
+                        debug!("consume err");
                         Some(Err(e))
                     }
                     Ok(_) => {
-                        eprintln!("trying again");
+                        debug!("trying again");
                         // try again. TODO: better
                         self.next()
                     }
@@ -162,8 +163,6 @@ impl<R: Read> Iterator for Streamer<R> {
 
 #[cfg(test)]
 mod tests {
-    
-
     use super::*;
 
     #[test]

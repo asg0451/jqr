@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use anyhow::{bail, Result};
 use clap::Parser;
 
@@ -12,6 +14,12 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
+    if let Err(std::env::VarError::NotPresent) = std::env::var("RUST_LOG") {
+        std::env::set_var("RUST_LOG", "info");
+    }
+
     let args = Args::parse();
 
     let filter = match parse_filter(&args.filter) {
@@ -25,13 +33,17 @@ fn main() -> Result<()> {
     let stdin = std::io::stdin();
     let r = stdin.lock();
 
-    let streamer = Streamer::new(r);
+    let hack = r.chain("\nnull\n".as_bytes());
+
+    let streamer = Streamer::new(hack);
 
     for v in streamer {
-        dbg!(&v);
         let v = v?;
         let output = filter.apply(&v);
-        dbg!(&output);
+
+        if let Some(j) = output {
+            println!("{}", j)
+        }
     }
 
     Ok(())

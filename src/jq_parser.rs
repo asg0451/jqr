@@ -9,6 +9,8 @@ use nom::{
     Finish, IResult,
 };
 
+use tracing::debug;
+
 use std::str;
 
 use crate::json_parser::JsonValue;
@@ -21,7 +23,7 @@ pub enum Filter {
 
 impl Filter {
     pub fn apply<'a>(&self, val: &'a JsonValue) -> Option<&'a JsonValue> {
-        eprintln!("applying {:?} to {:?}", self, val);
+        debug!("applying {:?} to {:?}", self, val);
         match self {
             Filter::FieldAccessor { fields } => {
                 let mut cur = val;
@@ -106,7 +108,7 @@ mod tests {
             let res = res.finish();
 
             if let Err(e) = &res {
-                eprintln!("errors:\n{}", convert_error(input, e.clone()));
+                debug!("errors:\n{}", convert_error(input, e.clone()));
             }
 
             assert_eq!(res, Ok(("", output)));
