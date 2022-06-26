@@ -3,7 +3,7 @@ use std::io::Read;
 use anyhow::{bail, Result};
 use clap::Parser;
 
-use jqr::{parse_filter, streamer::Streamer};
+use jqr::{parse_filter, Streamer};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
