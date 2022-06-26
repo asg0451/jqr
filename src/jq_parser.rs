@@ -2,10 +2,10 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
     character::complete::alphanumeric1,
-    combinator::{complete, map, opt},
+    combinator::{all_consuming, map, opt},
     error::{context, ContextError, ParseError, VerboseError},
-    multi::{many0, separated_list1},
-    sequence::{delimited, preceded},
+    multi::{many1, separated_list0, separated_list1},
+    sequence::{delimited, preceded, tuple},
     Finish, IResult,
 };
 
@@ -14,14 +14,30 @@ use tracing::debug;
 use crate::json_parser::JsonValue;
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct Pipeline {
+    filters: Vec<Filter>,
+}
+
+impl Pipeline {
+    pub fn apply<'a>(&self, val: &'a JsonValue) -> Option<JsonValue> {
+        self.filters
+            .iter()
+            .fold(Some(val.clone()), |acc, f| f.apply(&acc?))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Filter {
     FieldAccessor { fields: Vec<String> },
-    Pipeline { filters: Vec<Filter> },
+    FunctionCall { name: String, args: Vec<String> },
     // Spread {  }
 }
 
 impl Filter {
-    pub fn apply<'a>(&self, val: &'a JsonValue) -> Option<&'a JsonValue> {
+    // TODO: made this clone everything because the Cows were killing me
+    // the FieldAccessor branch can return a reference (how?), but the function call branch creates data
+
+    pub fn apply<'a>(&self, val: &'a JsonValue) -> Option<JsonValue> {
         debug!("applying {:?} to {:?}", self, val);
         match self {
             Filter::FieldAccessor { fields } => {
@@ -29,9 +45,29 @@ impl Filter {
                 for field in fields.iter() {
                     cur = cur.as_object()?.get(field)?
                 }
-                Some(cur)
+                Some(cur.clone())
             }
-            Filter::Pipeline { filters } => filters.iter().fold(Some(val), |acc, f| f.apply(acc?)),
+            // TODO: improve this
+            Filter::FunctionCall { name, args } => match name.as_str() {
+                "length" => match val {
+                    // TODO: unsafe "as"
+                    JsonValue::Array(a) => Some(JsonValue::Num(a.len() as f64)),
+                    JsonValue::Object(o) => Some(JsonValue::Num(o.len() as f64)),
+                    _ => panic!("cannot take length of non-array/object"),
+                },
+                "split" => {
+                    let delim = &args[0];
+                    match val {
+                        JsonValue::Str(s) => Some(JsonValue::Array(
+                            s.split(delim)
+                                .map(|e| JsonValue::Str(e.to_string()))
+                                .collect::<Vec<_>>(),
+                        )),
+                        _ => panic!("cannot split non-string"),
+                    }
+                }
+                _ => panic!("unknown function {}", name),
+            },
         }
     }
 }
@@ -57,46 +93,85 @@ fn field_accessor<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 fn field_accessor_chain<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, Vec<&'a str>, E> {
-    context("field_accessor_chain", many0(field_accessor))(i)
+    context("field_accessor_chain", many1(field_accessor))(i)
 }
 
-fn pipeline<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+fn function_name<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     i: &'a str,
-) -> IResult<&'a str, Vec<Vec<&'a str>>, E> {
+) -> IResult<&'a str, &'a str, E> {
+    context("function_name", identifier)(i)
+}
+
+// TODO: should be able to / have to put args in "quotes" unless numeric idk lol. maybe arg is a JsonValue?
+// but also the filter itself should be able to be a JsonValue so idk
+fn function_arg<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, &'a str, E> {
+    context("function_arg", identifier)(i)
+}
+
+fn function_args<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, Vec<&'a str>, E> {
     context(
-        "pipeline",
-        separated_list1(
-            delimited(opt(sp), tag("|"), opt(sp)),
-            // TODO: this won't work in the long term.
-            field_accessor_chain,
-        ),
+        "function_args",
+        separated_list0(delimited(opt(sp), tag(","), opt(sp)), function_arg),
     )(i)
 }
 
-fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+// TODO: "()" should be optional
+fn function_call<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, (&'a str, Vec<&'a str>), E> {
+    context(
+        "function_call",
+        tuple((function_name, delimited(tag("("), function_args, tag(")")))),
+    )(i)
+}
+
+fn filter<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, Filter, E> {
     delimited(
         opt(sp),
         alt((
-            map(pipeline, |v| Filter::Pipeline {
-                filters: v
-                    .into_iter()
-                    .map(|fs| Filter::FieldAccessor {
-                        fields: fs.into_iter().map(|s| s.to_owned()).collect(), // TODO: borrow
-                    })
-                    .collect(),
+            // special case: '.'
+            map(all_consuming(tag(".")), |_| Filter::FieldAccessor {
+                fields: vec![],
             }),
             map(field_accessor_chain, |v| Filter::FieldAccessor {
-                fields: v.into_iter().map(|s| s.to_owned()).collect(), // TODO: borrow
+                fields: v.into_iter().map(|s| s.to_owned()).collect(),
+            }),
+            map(function_call, |(name, args)| Filter::FunctionCall {
+                name: name.to_owned(),
+                args: args.into_iter().map(|s| s.to_owned()).collect(),
             }),
         )),
         opt(sp),
     )(i)
 }
 
-pub fn parse_filter<'a>(i: &'a str) -> Result<Filter, VerboseError<&'a str>> {
-    let filter = complete::<_, _, VerboseError<&'a str>, _>(root)(i)
+fn pipeline<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, Vec<Filter>, E> {
+    context(
+        "pipeline",
+        separated_list1(delimited(opt(sp), tag("|"), opt(sp)), filter),
+    )(i)
+}
+
+fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, Pipeline, E> {
+    delimited(
+        opt(sp),
+        map(pipeline, |filters| Pipeline { filters }),
+        opt(sp),
+    )(i)
+}
+
+pub fn parse_filter<'a>(i: &'a str) -> Result<Pipeline, VerboseError<&'a str>> {
+    let filter = all_consuming::<_, _, VerboseError<&'a str>, _>(root)(i)
         .finish()?
         .1;
     Ok(filter)
@@ -113,7 +188,7 @@ mod tests {
         let cases = [
             (
                 " .hello.man ",
-                Filter::Pipeline {
+                Pipeline {
                     filters: vec![Filter::FieldAccessor {
                         fields: vec!["hello".into(), "man".into()],
                     }],
@@ -121,7 +196,7 @@ mod tests {
             ),
             (
                 ".hi",
-                Filter::Pipeline {
+                Pipeline {
                     filters: vec![Filter::FieldAccessor {
                         fields: vec!["hi".into()],
                     }],
@@ -129,13 +204,13 @@ mod tests {
             ),
             (
                 ".",
-                Filter::Pipeline {
+                Pipeline {
                     filters: vec![Filter::FieldAccessor { fields: vec![] }],
                 },
             ),
             (
                 ".a | .b",
-                Filter::Pipeline {
+                Pipeline {
                     filters: vec![
                         Filter::FieldAccessor {
                             fields: vec!["a".into()],
@@ -146,13 +221,49 @@ mod tests {
                     ],
                 },
             ),
+            (
+                "hello(42)",
+                Pipeline {
+                    filters: vec![Filter::FunctionCall {
+                        name: "hello".into(),
+                        args: vec!["42".into()],
+                    }],
+                },
+            ),
+            (
+                ".a | hello(42)",
+                Pipeline {
+                    filters: vec![
+                        Filter::FieldAccessor {
+                            fields: vec!["a".into()],
+                        },
+                        Filter::FunctionCall {
+                            name: "hello".into(),
+                            args: vec!["42".into()],
+                        },
+                    ],
+                },
+            ),
+            // TODO: why this one no worky
+            (
+                ". | hello(42)",
+                Pipeline {
+                    filters: vec![
+                        Filter::FieldAccessor { fields: vec![] },
+                        Filter::FunctionCall {
+                            name: "hello".into(),
+                            args: vec!["42".into()],
+                        },
+                    ],
+                },
+            ),
         ];
 
         for (input, output) in cases {
             let res = parse_filter(input);
 
             if let Err(e) = &res {
-                debug!("errors:\n{}", convert_error(input, e.clone()));
+                eprintln!("errors:\n{}", convert_error(input, e.clone()));
             }
 
             let filter = res.expect("no error");

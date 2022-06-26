@@ -12,7 +12,7 @@ use nom::{
 
 use std::collections::BTreeMap;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
     Null,
     Str(String),
@@ -132,6 +132,7 @@ fn sp<'a, E: ParseError<&'a [u8]>>(i: &'a [u8]) -> IResult<&'a [u8], &'a [u8], E
 /// of the input data. and there is no allocation needed. This is the main idea
 /// behind nom's performance.
 fn parse_str<'a, E: ParseError<&'a [u8]>>(i: &'a [u8]) -> IResult<&'a [u8], &'a [u8], E> {
+    // TODO: strings should be allowed to have non alphanum chars in them eg spaces
     escaped(alphanumeric, '\\', one_of("\"n\\"))(i)
 }
 

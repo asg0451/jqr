@@ -16,7 +16,7 @@ pub struct Streamer<R> {
     eof: bool,
 }
 
-const DEFAULT_BUF_SIZE: usize = 10;
+const DEFAULT_BUF_SIZE: usize = 100;
 const ZEROS: [u8; DEFAULT_BUF_SIZE] = [0u8; DEFAULT_BUF_SIZE];
 
 // is this an iterator?
