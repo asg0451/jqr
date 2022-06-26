@@ -9,8 +9,8 @@ use nom::{
     sequence::{delimited, preceded, separated_pair, terminated},
     IResult,
 };
-use std::collections::HashMap;
-use std::str;
+
+use std::collections::BTreeMap;
 
 #[derive(Debug, PartialEq)]
 pub enum JsonValue {
@@ -19,7 +19,7 @@ pub enum JsonValue {
     Boolean(bool),
     Num(f64),
     Array(Vec<JsonValue>),
-    Object(HashMap<String, JsonValue>),
+    Object(BTreeMap<String, JsonValue>),
 }
 
 impl std::fmt::Display for JsonValue {
@@ -81,7 +81,7 @@ impl JsonValue {
             _ => None,
         }
     }
-    pub fn as_object(&self) -> Option<&HashMap<String, JsonValue>> {
+    pub fn as_object(&self) -> Option<&BTreeMap<String, JsonValue>> {
         match self {
             JsonValue::Object(o) => Some(o),
             _ => None,
@@ -212,7 +212,7 @@ fn key_value<'a, E: ParseError<&'a [u8]> + ContextError<&'a [u8]>>(
 
 fn hash<'a, E: ParseError<&'a [u8]> + ContextError<&'a [u8]>>(
     i: &'a [u8],
-) -> IResult<&'a [u8], HashMap<String, JsonValue>, E> {
+) -> IResult<&'a [u8], BTreeMap<String, JsonValue>, E> {
     context(
         "map",
         preceded(
