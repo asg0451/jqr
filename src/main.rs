@@ -9,7 +9,7 @@ use jqr::{parse_filter, Streamer};
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// Filter string
-    #[clap(short, long)]
+    #[clap()]
     filter: String,
 }
 
