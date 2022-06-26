@@ -2,16 +2,14 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
     character::complete::alphanumeric1,
-    combinator::{all_consuming, map, opt},
+    combinator::{complete, map, opt},
     error::{context, ContextError, ParseError, VerboseError},
-    multi::many1,
+    multi::many0,
     sequence::{delimited, preceded},
     Finish, IResult,
 };
 
 use tracing::debug;
-
-use std::str;
 
 use crate::json_parser::JsonValue;
 
@@ -57,7 +55,7 @@ fn field_accessor<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 fn field_accessor_chain<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, Vec<&'a str>, E> {
-    context("field_accessor_chain", many1(field_accessor))(i)
+    context("field_accessor_chain", many0(field_accessor))(i)
 }
 
 fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -73,7 +71,7 @@ fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 }
 
 pub fn parse_filter<'a>(i: &'a str) -> Result<Filter, VerboseError<&'a str>> {
-    let filter = all_consuming::<_, _, VerboseError<&'a str>, _>(root)(i)
+    let filter = complete::<_, _, VerboseError<&'a str>, _>(root)(i)
         .finish()?
         .1;
     Ok(filter)
@@ -100,18 +98,18 @@ mod tests {
                     fields: vec!["hi".into()],
                 },
             ),
+            (".", Filter::FieldAccessor { fields: vec![] }),
         ];
 
         for (input, output) in cases {
-            let res = root::<VerboseError<&str>>(input);
-            dbg!(&res);
-            let res = res.finish();
+            let res = parse_filter(input);
 
             if let Err(e) = &res {
                 debug!("errors:\n{}", convert_error(input, e.clone()));
             }
 
-            assert_eq!(res, Ok(("", output)));
+            let filter = res.expect("no error");
+            assert_eq!(filter, output);
         }
         Ok(())
     }

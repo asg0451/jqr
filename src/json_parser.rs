@@ -42,7 +42,7 @@ impl std::fmt::Display for JsonValue {
             JsonValue::Object(o) => {
                 write!(f, "{{")?;
                 for (i, (k, v)) in o.iter().enumerate() {
-                    write!(f, "{}:{}", k, v)?;
+                    write!(f, r#""{}":{}"#, k, v)?;
                     if i != o.len() - 1 {
                         write!(f, ",")?;
                     }
