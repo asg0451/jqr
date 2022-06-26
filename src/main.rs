@@ -2,6 +2,7 @@ use std::io::Read;
 
 use anyhow::{bail, Result};
 use clap::Parser;
+use tracing::info;
 
 use jqr::{parse_filter, Streamer};
 
@@ -11,6 +12,10 @@ struct Args {
     /// Filter string
     #[clap()]
     filter: String,
+
+    /// Input path (empty for stdin)
+    #[clap()]
+    input_file: Option<std::path::PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -30,10 +35,16 @@ fn main() -> Result<()> {
         }
     };
 
-    let stdin = std::io::stdin();
-    let r = stdin.lock();
+    info!("filter: {:?}", filter);
 
-    let hack = r.chain("\nnull\n".as_bytes());
+    let s = std::io::stdin();
+    let reader: Box<dyn Read> = match args.input_file {
+        // TODO: support Some("-")
+        None => Box::new(s.lock()),
+        Some(p) => Box::new(std::fs::File::open(p)?),
+    };
+
+    let hack = reader.chain("\nnull\n".as_bytes());
 
     let streamer = Streamer::new(hack);
 

@@ -4,7 +4,7 @@ use nom::{
     character::complete::alphanumeric1,
     combinator::{complete, map, opt},
     error::{context, ContextError, ParseError, VerboseError},
-    multi::many0,
+    multi::{many0, separated_list1},
     sequence::{delimited, preceded},
     Finish, IResult,
 };
@@ -16,7 +16,8 @@ use crate::json_parser::JsonValue;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Filter {
     FieldAccessor { fields: Vec<String> },
-    // Pipeline(Box<Filter>, Box<Filter>),
+    Pipeline { filters: Vec<Filter> },
+    // Spread {  }
 }
 
 impl Filter {
@@ -30,6 +31,7 @@ impl Filter {
                 }
                 Some(cur)
             }
+            Filter::Pipeline { filters } => filters.iter().fold(Some(val), |acc, f| f.apply(acc?)),
         }
     }
 }
@@ -58,14 +60,37 @@ fn field_accessor_chain<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     context("field_accessor_chain", many0(field_accessor))(i)
 }
 
+fn pipeline<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, Vec<Vec<&'a str>>, E> {
+    context(
+        "pipeline",
+        separated_list1(
+            delimited(opt(sp), tag("|"), opt(sp)),
+            // TODO: this won't work in the long term.
+            field_accessor_chain,
+        ),
+    )(i)
+}
+
 fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, Filter, E> {
     delimited(
         opt(sp),
-        alt((map(field_accessor_chain, |v| Filter::FieldAccessor {
-            fields: v.into_iter().map(|s| s.to_owned()).collect(),
-        }),)),
+        alt((
+            map(pipeline, |v| Filter::Pipeline {
+                filters: v
+                    .into_iter()
+                    .map(|fs| Filter::FieldAccessor {
+                        fields: fs.into_iter().map(|s| s.to_owned()).collect(), // TODO: borrow
+                    })
+                    .collect(),
+            }),
+            map(field_accessor_chain, |v| Filter::FieldAccessor {
+                fields: v.into_iter().map(|s| s.to_owned()).collect(), // TODO: borrow
+            }),
+        )),
         opt(sp),
     )(i)
 }
@@ -88,17 +113,39 @@ mod tests {
         let cases = [
             (
                 " .hello.man ",
-                Filter::FieldAccessor {
-                    fields: vec!["hello".into(), "man".into()],
+                Filter::Pipeline {
+                    filters: vec![Filter::FieldAccessor {
+                        fields: vec!["hello".into(), "man".into()],
+                    }],
                 },
             ),
             (
                 ".hi",
-                Filter::FieldAccessor {
-                    fields: vec!["hi".into()],
+                Filter::Pipeline {
+                    filters: vec![Filter::FieldAccessor {
+                        fields: vec!["hi".into()],
+                    }],
                 },
             ),
-            (".", Filter::FieldAccessor { fields: vec![] }),
+            (
+                ".",
+                Filter::Pipeline {
+                    filters: vec![Filter::FieldAccessor { fields: vec![] }],
+                },
+            ),
+            (
+                ".a | .b",
+                Filter::Pipeline {
+                    filters: vec![
+                        Filter::FieldAccessor {
+                            fields: vec!["a".into()],
+                        },
+                        Filter::FieldAccessor {
+                            fields: vec!["b".into()],
+                        },
+                    ],
+                },
+            ),
         ];
 
         for (input, output) in cases {
